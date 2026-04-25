@@ -212,5 +212,63 @@ defmodule SootTelemetry.Plug.IngestTest do
       assert conn.status == 423
       assert Jason.decode!(conn.resp_body)["error"] == "stream_unavailable"
     end
+
+    test "retired stream → 423 with status retired", ctx do
+      {:ok, _} = StreamRow.retire(ctx.stream)
+
+      conn = request(ctx.actor, :vibration, "x", valid_headers(ctx.schema))
+      assert conn.status == 423
+      body = Jason.decode!(conn.resp_body)
+      assert body["error"] == "stream_unavailable"
+      assert body["status"] == "retired"
+    end
+
+    test "stream pointing at a missing schema → 500 no_active_schema", ctx do
+      {:ok, _} =
+        Ash.update(ctx.stream, %{current_schema_id: Ecto.UUID.generate()},
+          action: :update,
+          authorize?: false
+        )
+
+      conn = request(ctx.actor, :vibration, "x", valid_headers(ctx.schema))
+      assert conn.status == 500
+      assert Jason.decode!(conn.resp_body)["error"] == "no_active_schema"
+    end
+
+    test "writer-side error surfaces as a structured 500", ctx do
+      defmodule FailingWriter do
+        @behaviour SootTelemetry.Writer
+        def write(_), do: {:error, :downstream_unavailable}
+      end
+
+      Application.put_env(:soot_telemetry, :writer, FailingWriter)
+      on_exit(fn -> Application.delete_env(:soot_telemetry, :writer) end)
+
+      conn = request(ctx.actor, :vibration, "x", valid_headers(ctx.schema))
+      assert conn.status == 500
+      assert Jason.decode!(conn.resp_body)["error"] == "writer_error"
+    end
+
+    test "body exceeding max_body_bytes → 413", ctx do
+      body = String.duplicate("x", 200)
+
+      conn =
+        request(ctx.actor, :vibration, body, valid_headers(ctx.schema), max_body_bytes: 64)
+
+      assert conn.status == 413
+      assert Jason.decode!(conn.resp_body)["error"] == "body_too_large"
+    end
+
+    test "rate-limited with zero refill returns retry-after = 3600", ctx do
+      RateLimiter.reset_all()
+      opts = [device_stream: %{capacity: 1.0, refill_per_second: 0.0}]
+
+      assert request(ctx.actor, :vibration, "ok", valid_headers(ctx.schema, 0, 1), opts).status ==
+               204
+
+      conn = request(ctx.actor, :vibration, "again", valid_headers(ctx.schema, 2, 3), opts)
+      assert conn.status == 429
+      assert get_resp_header(conn, "retry-after") == ["3600"]
+    end
   end
 end
