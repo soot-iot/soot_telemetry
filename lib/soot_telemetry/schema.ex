@@ -2,10 +2,11 @@ defmodule SootTelemetry.Schema do
   @moduledoc """
   An immutable, versioned snapshot of a stream's Arrow schema.
 
-  Each unique fingerprint produces one row. The current row for a given
-  stream is referenced by `SootTelemetry.StreamRow.current_schema_id`.
-  Rows are never mutated past the active/deprecated transition; new
-  schemas land as new rows.
+  One row per `(stream_name, fingerprint)` pair. The current row for a
+  given stream is referenced by
+  `SootTelemetry.StreamRow.current_schema_id`. Field values are never
+  rewritten — new schemas land as new rows. The only mutations are
+  status transitions: `:active → :deprecated → :retired`.
   """
 
   use Ash.Resource,
@@ -52,7 +53,8 @@ defmodule SootTelemetry.Schema do
   end
 
   identities do
-    identity :unique_fingerprint, [:fingerprint], pre_check_with: SootTelemetry.Domain
+    identity :unique_fingerprint_per_stream, [:stream_name, :fingerprint],
+      pre_check_with: SootTelemetry.Domain
 
     identity :unique_version_per_stream, [:stream_name, :version],
       pre_check_with: SootTelemetry.Domain
@@ -73,10 +75,11 @@ defmodule SootTelemetry.Schema do
       change set_attribute(:status, :retired)
     end
 
-    read :get_by_fingerprint do
+    read :get_for_stream_fingerprint do
+      argument :stream_name, :atom, allow_nil?: false
       argument :fingerprint, :string, allow_nil?: false
       get? true
-      filter expr(fingerprint == ^arg(:fingerprint))
+      filter expr(stream_name == ^arg(:stream_name) and fingerprint == ^arg(:fingerprint))
     end
 
     read :for_stream do
@@ -90,7 +93,7 @@ defmodule SootTelemetry.Schema do
     define :create, args: [:stream_name, :version, :fingerprint, :descriptor]
     define :deprecate
     define :retire
-    define :get_by_fingerprint, args: [:fingerprint]
+    define :get_for_stream_fingerprint, args: [:stream_name, :fingerprint]
     define :for_stream, args: [:stream_name]
   end
 end

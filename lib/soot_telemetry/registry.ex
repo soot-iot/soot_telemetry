@@ -50,7 +50,7 @@ defmodule SootTelemetry.Registry do
   end
 
   defp ensure_schema(name, fingerprint, descriptor) do
-    case Schema.get_by_fingerprint(fingerprint, authorize?: false) do
+    case Schema.get_for_stream_fingerprint(name, fingerprint, authorize?: false) do
       {:ok, %Schema{} = schema} ->
         {:ok, schema}
 
