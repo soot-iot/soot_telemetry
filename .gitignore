@@ -7,6 +7,8 @@ erl_crash.dump
 *.ez
 *.beam
 /priv/migrations/
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
 /.elixir_ls/
 .DS_Store
 *~

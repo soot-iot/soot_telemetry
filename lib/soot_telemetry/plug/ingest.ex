@@ -206,7 +206,6 @@ defmodule SootTelemetry.Plug.Ingest do
          }) do
       :ok -> :ok
       {:error, reason} -> {:error, {:writer_error, reason}}
-      other -> {:error, {:writer_error, other}}
     end
   end
 

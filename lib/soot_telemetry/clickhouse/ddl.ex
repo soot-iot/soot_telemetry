@@ -168,17 +168,12 @@ defmodule SootTelemetry.ClickHouse.DDL do
   defp format_setting(v) when is_binary(v), do: ~s('#{v}')
   defp format_setting(v), do: to_string(v)
 
-  defp ttl_from_retention(nil), do: nil
   defp ttl_from_retention([]), do: nil
 
-  defp ttl_from_retention(retention) when is_list(retention) do
-    case retention do
-      [{:days, n}] -> "ts + INTERVAL #{n} DAY"
-      [{:months, n}] -> "ts + INTERVAL #{n} MONTH"
-      [{:years, n}] -> "ts + INTERVAL #{n} YEAR"
-      _ -> nil
-    end
-  end
+  defp ttl_from_retention([{:days, n}]), do: "ts + INTERVAL #{n} DAY"
+  defp ttl_from_retention([{:months, n}]), do: "ts + INTERVAL #{n} MONTH"
+  defp ttl_from_retention([{:years, n}]), do: "ts + INTERVAL #{n} YEAR"
+  defp ttl_from_retention(retention) when is_list(retention), do: nil
 
   defp normalize_name(%Field{name: n}), do: to_string(n)
   defp normalize_name(%{name: n}), do: to_string(n)
