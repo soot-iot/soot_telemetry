@@ -16,7 +16,8 @@ defmodule SootTelemetry.MixProject do
       description: description(),
       package: package(),
       source_url: @source_url,
-      docs: docs()
+      docs: docs(),
+      aliases: aliases()
     ]
   end
 
@@ -53,6 +54,13 @@ defmodule SootTelemetry.MixProject do
     ]
   end
 
+  defp aliases do
+    [
+      format: "format --migrate",
+      credo: "credo --strict"
+    ]
+  end
+
   defp deps do
     [
       {:ash, "~> 3.24"},
@@ -60,7 +68,14 @@ defmodule SootTelemetry.MixProject do
       {:ash_pki, path: "../ash_pki"},
       {:soot_core, path: "../soot_core"},
       {:plug, "~> 1.19"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+
+      # Dev / test
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: [:dev], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
+      {:simple_sat, "~> 0.1", only: [:dev, :test]},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false}
     ]
   end
 end

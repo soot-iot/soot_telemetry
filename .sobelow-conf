@@ -1,0 +1,21 @@
+[
+  verbose: false,
+  private: false,
+  skip: false,
+  router: "",
+  exit: "Low",
+  format: "txt",
+  out: "",
+  threshold: "low",
+  # DOS.StringToAtom flags `String.to_atom/1` in
+  # `SootTelemetry.ClickHouse.DDL.maybe_atom/1`. The function only
+  # runs against descriptor maps generated from validated
+  # `telemetry_stream` declarations — never operator-controlled
+  # input — so the atom-table-exhaustion risk does not apply.
+  ignore: ["Traversal.FileModule", "DOS.StringToAtom"],
+  ignore_files: [],
+  details: nil,
+  all_details: nil,
+  mark_skip_all: nil,
+  clear_skip: nil
+]

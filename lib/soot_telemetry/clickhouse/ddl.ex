@@ -44,17 +44,12 @@ defmodule SootTelemetry.ClickHouse.DDL do
     column_lines =
       module
       |> Info.fields()
-      |> Enum.map(&render_column/1)
-      |> Enum.map(&("    " <> &1))
-      |> Enum.join(",\n")
+      |> Enum.map_join(",\n", &("    " <> render_column(&1)))
 
     ch = Info.clickhouse(module)
     engine = ch.engine || "MergeTree"
 
-    order_by =
-      ch.order_by
-      |> Enum.map(&Atom.to_string/1)
-      |> Enum.join(", ")
+    order_by = Enum.map_join(ch.order_by, ", ", &Atom.to_string/1)
 
     base = """
     CREATE TABLE IF NOT EXISTS #{fully_qualified} (
@@ -74,9 +69,7 @@ defmodule SootTelemetry.ClickHouse.DDL do
   @doc "Render `CREATE TABLE …` for every module in a list, joined by blank lines."
   @spec create_tables([module()], keyword()) :: String.t()
   def create_tables(modules, opts \\ []) do
-    modules
-    |> Enum.map(&create_table(&1, opts))
-    |> Enum.join("\n\n")
+    Enum.map_join(modules, "\n\n", &create_table(&1, opts))
   end
 
   @doc """
@@ -167,10 +160,7 @@ defmodule SootTelemetry.ClickHouse.DDL do
   defp append_settings(sql, []), do: sql
 
   defp append_settings(sql, settings) do
-    rendered =
-      settings
-      |> Enum.map(fn {k, v} -> "#{k} = #{format_setting(v)}" end)
-      |> Enum.join(", ")
+    rendered = Enum.map_join(settings, ", ", fn {k, v} -> "#{k} = #{format_setting(v)}" end)
 
     sql <> "\nSETTINGS " <> rendered
   end

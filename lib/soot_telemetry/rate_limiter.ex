@@ -71,9 +71,10 @@ defmodule SootTelemetry.RateLimiter do
       missing = cost - refilled
 
       retry_after_ms =
-        cond do
-          config.refill_per_second <= 0 -> :infinity
-          true -> max(1, ceil(missing / config.refill_per_second * 1_000))
+        if config.refill_per_second <= 0 do
+          :infinity
+        else
+          max(1, ceil(missing / config.refill_per_second * 1_000))
         end
 
       :ets.insert(@table, {key, refilled, now_ms})
