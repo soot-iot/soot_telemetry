@@ -166,7 +166,7 @@ mix soot_telemetry.gen_migrations \
 mix test
 ```
 
-58 tests cover: DSL parsing + parse-time rejections (unknown type,
+The suite covers: DSL parsing + parse-time rejections (unknown type,
 missing name), Info accessors and effective lookups, fingerprint
 determinism + key-order independence, the registry's idempotence and
 multi-module registration, the rate limiter (exhaustion, refill,

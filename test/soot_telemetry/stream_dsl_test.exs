@@ -78,7 +78,7 @@ defmodule SootTelemetry.StreamDslTest do
   describe "DSL parse-time validation" do
     test "rejects an unknown field type" do
       assert_raise Spark.Error.DslError, fn ->
-        defmodule BadType do
+        defmodule Elixir.SootTelemetry.Test.DslRejected.BadType do
           use SootTelemetry.Stream.Definition
 
           telemetry_stream do
@@ -98,7 +98,7 @@ defmodule SootTelemetry.StreamDslTest do
 
     test "rejects missing stream name" do
       assert_raise Spark.Error.DslError, fn ->
-        defmodule NoName do
+        defmodule Elixir.SootTelemetry.Test.DslRejected.NoName do
           use SootTelemetry.Stream.Definition
 
           telemetry_stream do

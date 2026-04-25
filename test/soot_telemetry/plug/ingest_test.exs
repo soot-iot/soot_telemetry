@@ -4,7 +4,7 @@ defmodule SootTelemetry.Plug.IngestTest do
   import Plug.Conn
 
   alias AshPki.Plug.MTLS.Actor
-  alias SootTelemetry.{IngestSession, Plug.Ingest, RateLimiter, Registry, Schema, StreamRow}
+  alias SootTelemetry.{IngestSession, Plug.Ingest, RateLimiter, Registry, StreamRow}
   alias SootTelemetry.Test.Factories
   alias SootTelemetry.Test.Fixtures.Vibration
 

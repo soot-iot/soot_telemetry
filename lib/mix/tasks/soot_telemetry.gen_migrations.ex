@@ -47,7 +47,10 @@ defmodule Mix.Tasks.SootTelemetry.GenMigrations do
 
   defp load_module(name) do
     mod = Module.concat([name])
-    Code.ensure_loaded!(mod)
-    mod
+
+    case Code.ensure_loaded(mod) do
+      {:module, ^mod} -> mod
+      {:error, reason} -> Mix.raise("could not load #{name} (#{inspect(reason)})")
+    end
   end
 end
