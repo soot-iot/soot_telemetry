@@ -26,6 +26,48 @@ defmodule SootTelemetry.Test.Fixtures.Vibration do
   end
 end
 
+defmodule SootTelemetry.Test.Fixtures.AmbientA do
+  @moduledoc """
+  Same field set as `AmbientB`, different stream name. Used to assert
+  that fingerprint collisions across streams resolve to distinct
+  Schema rows.
+  """
+  use SootTelemetry.Stream.Definition
+
+  telemetry_stream do
+    name :ambient_a
+    tenant_scope(:per_tenant)
+
+    fields do
+      field :ts, :timestamp_us, required: true
+      field :temperature, :float32
+    end
+
+    clickhouse do
+      order_by([:ts])
+    end
+  end
+end
+
+defmodule SootTelemetry.Test.Fixtures.AmbientB do
+  @moduledoc false
+  use SootTelemetry.Stream.Definition
+
+  telemetry_stream do
+    name :ambient_b
+    tenant_scope(:per_tenant)
+
+    fields do
+      field :ts, :timestamp_us, required: true
+      field :temperature, :float32
+    end
+
+    clickhouse do
+      order_by([:ts])
+    end
+  end
+end
+
 defmodule SootTelemetry.Test.Fixtures.Power do
   @moduledoc false
   use SootTelemetry.Stream.Definition

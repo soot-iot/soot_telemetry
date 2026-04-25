@@ -2,7 +2,7 @@ defmodule SootTelemetry.FingerprintTest do
   use ExUnit.Case, async: true
 
   alias SootTelemetry.Schema.Fingerprint
-  alias SootTelemetry.Test.Fixtures.{Power, Vibration}
+  alias SootTelemetry.Test.Fixtures.{AmbientA, AmbientB, Power, Vibration}
 
   test "is deterministic across calls" do
     assert Fingerprint.compute(Vibration) == Fingerprint.compute(Vibration)
@@ -57,5 +57,17 @@ defmodule SootTelemetry.FingerprintTest do
 
     refute Fingerprint.compute_descriptor(canonical) ==
              Fingerprint.compute_descriptor(mutated)
+  end
+
+  test "stream name participates in the canonical descriptor and the fingerprint" do
+    # AmbientA and AmbientB declare the same field set under different
+    # stream names. Because the descriptor includes the stream name,
+    # their fingerprints differ — which keeps the Schema rows distinct
+    # at the registry level. This is the invariant the
+    # `unique_fingerprint_per_stream` identity guards against
+    # regressions in.
+    assert Fingerprint.descriptor(AmbientA).name == :ambient_a
+    assert Fingerprint.descriptor(AmbientB).name == :ambient_b
+    refute Fingerprint.compute(AmbientA) == Fingerprint.compute(AmbientB)
   end
 end
