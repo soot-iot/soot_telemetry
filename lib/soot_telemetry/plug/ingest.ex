@@ -37,6 +37,7 @@ defmodule SootTelemetry.Plug.Ingest do
 
   @behaviour Plug
   import Plug.Conn
+  require Logger
 
   alias AshPki.Plug.MTLS.Actor
   alias SootTelemetry.{IngestSession, RateLimiter, Schema, StreamRow, Writer}
@@ -60,19 +61,8 @@ defmodule SootTelemetry.Plug.Ingest do
          {:ok, seq_start, seq_end} <- read_sequence_headers(conn),
          :ok <- check_sequence(actor, stream, seq_start),
          :ok <- check_rate_limits(actor, stream, opts),
-         {:ok, body} <- read_request_body(conn) do
-      :ok =
-        Writer.write(%{
-          body: body,
-          stream: stream.name,
-          fingerprint: schema.fingerprint,
-          sequence_start: seq_start,
-          sequence_end: seq_end,
-          device_id: actor && actor.fingerprint,
-          tenant_id: tenant_id_from_actor(actor),
-          received_at: DateTime.utc_now()
-        })
-
+         {:ok, body} <- read_request_body(conn),
+         :ok <- write_batch(body, stream, schema, actor, seq_start, seq_end) do
       record_session(actor, stream, byte_size(body), seq_end)
 
       send_resp(conn, 204, "") |> halt()
@@ -187,14 +177,13 @@ defmodule SootTelemetry.Plug.Ingest do
     end
   end
 
-  defp tenant_id_from_actor(%Actor{san: san}) do
-    # Convention: the SPIFFE-style URI SAN encodes the tenant slug —
-    # `URI:device://<tenant>/devices/<serial>`. If the device's cert
-    # doesn't follow that, fall back to nil.
+  # Convention: the SPIFFE-style URI SAN encodes the tenant slug —
+  # `URI:device://<tenant>/devices/<serial>`. If the device's cert
+  # doesn't follow that, fall back to nil.
+  defp tenant_id_from_actor(%Actor{san: san}) when is_list(san) do
     Enum.find_value(san, fn
       {:uniformResourceIdentifier, charlist} ->
-        String.split(List.to_string(charlist), "/")
-        |> case do
+        case String.split(List.to_string(charlist), "/") do
           ["device:", "", tenant | _] -> tenant
           _ -> nil
         end
@@ -216,10 +205,27 @@ defmodule SootTelemetry.Plug.Ingest do
     end
   end
 
+  defp write_batch(body, stream, schema, actor, seq_start, seq_end) do
+    case Writer.write(%{
+           body: body,
+           stream: stream.name,
+           fingerprint: schema.fingerprint,
+           sequence_start: seq_start,
+           sequence_end: seq_end,
+           device_id: actor.fingerprint,
+           tenant_id: tenant_id_from_actor(actor),
+           received_at: DateTime.utc_now()
+         }) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {:writer_error, reason}}
+      other -> {:error, {:writer_error, other}}
+    end
+  end
+
   defp record_session(actor, stream, bytes, seq_end) do
     case IngestSession.for_device_stream(actor.certificate_id, stream.id, authorize?: false) do
       {:ok, %IngestSession{} = session} ->
-        IngestSession.record_batch(session, bytes, seq_end, authorize?: false)
+        log_session_error(IngestSession.record_batch(session, bytes, seq_end, authorize?: false))
 
       _ ->
         IngestSession.create(
@@ -232,12 +238,24 @@ defmodule SootTelemetry.Plug.Ingest do
         )
         |> case do
           {:ok, session} ->
-            IngestSession.record_batch(session, bytes, seq_end, authorize?: false)
+            log_session_error(
+              IngestSession.record_batch(session, bytes, seq_end, authorize?: false)
+            )
 
           err ->
-            err
+            log_session_error(err)
         end
     end
+  end
+
+  defp log_session_error({:ok, _} = ok), do: ok
+
+  defp log_session_error({:error, reason} = err) do
+    Logger.warning(fn ->
+      "soot_telemetry: IngestSession write failed: " <> inspect(reason)
+    end)
+
+    err
   end
 
   # ─── responses ─────────────────────────────────────────────────────────
@@ -291,6 +309,12 @@ defmodule SootTelemetry.Plug.Ingest do
 
   defp response_for(:body_too_large), do: {413, "body_too_large", [], %{}}
   defp response_for(:body_read_failed), do: {400, "body_read_failed", [], %{}}
+
+  defp response_for({:writer_error, reason}) do
+    Logger.error(fn -> "soot_telemetry: writer rejected batch: " <> inspect(reason) end)
+    {500, "writer_error", [], %{}}
+  end
+
   defp response_for(_), do: {500, "internal_error", [], %{}}
 
   defp retry_after_seconds(:infinity), do: "3600"

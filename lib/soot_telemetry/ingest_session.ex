@@ -59,7 +59,7 @@ defmodule SootTelemetry.IngestSession do
       change atomic_update(:batch_count, expr(batch_count + 1))
       change atomic_update(:byte_count, expr(byte_count + ^arg(:bytes)))
       change set_attribute(:last_batch_at, &DateTime.utc_now/0)
-      change atomic_update(:sequence_high_water, expr(^arg(:sequence_end)))
+      change SootTelemetry.IngestSession.Changes.ClampSequenceHighWater
     end
 
     read :for_device_stream do
