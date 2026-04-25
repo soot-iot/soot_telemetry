@@ -19,7 +19,17 @@ defmodule SootTelemetry.StreamDslTest do
   describe "fields/1" do
     test "preserves declaration order" do
       names = Vibration |> Info.fields() |> Enum.map(& &1.name)
-      assert names == [:ts, :ingest_ts, :device_id, :tenant_id, :axis_x, :axis_y, :axis_z, :sequence]
+
+      assert names == [
+               :ts,
+               :ingest_ts,
+               :device_id,
+               :tenant_id,
+               :axis_x,
+               :axis_y,
+               :axis_z,
+               :sequence
+             ]
     end
 
     test "carries flags accurately" do
@@ -79,7 +89,7 @@ defmodule SootTelemetry.StreamDslTest do
             end
 
             clickhouse do
-              order_by [:x]
+              order_by([:x])
             end
           end
         end

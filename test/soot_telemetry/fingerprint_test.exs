@@ -42,7 +42,17 @@ defmodule SootTelemetry.FingerprintTest do
 
     mutated =
       Map.update!(canonical, :fields, fn fields ->
-        fields ++ [%{name: :extra, type: :float32, required: false, dictionary: false, server_set: false, monotonic: false}]
+        fields ++
+          [
+            %{
+              name: :extra,
+              type: :float32,
+              required: false,
+              dictionary: false,
+              server_set: false,
+              monotonic: false
+            }
+          ]
       end)
 
     refute Fingerprint.compute_descriptor(canonical) ==

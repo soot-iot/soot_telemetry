@@ -141,8 +141,7 @@ defmodule SootTelemetry.RateLimiter do
           settings ->
             %{
               capacity: settings |> Keyword.fetch!(:capacity) |> to_float(),
-              refill_per_second:
-                settings |> Keyword.fetch!(:refill_per_second) |> to_float()
+              refill_per_second: settings |> Keyword.fetch!(:refill_per_second) |> to_float()
             }
         end
     end

@@ -80,14 +80,29 @@ defmodule SootTelemetry.ClickHouse.DDLTest do
     end
 
     test "removed column → :non_additive" do
-      from = %{"fields" => [%{"name" => "a", "type" => "int32", "required" => true, "dictionary" => false}]}
+      from = %{
+        "fields" => [
+          %{"name" => "a", "type" => "int32", "required" => true, "dictionary" => false}
+        ]
+      }
+
       to = %{"fields" => []}
       assert {:error, :non_additive} = DDL.alter_for_descriptor_change("t", from, to)
     end
 
     test "changed type → :non_additive" do
-      from = %{"fields" => [%{"name" => "x", "type" => "int32", "required" => true, "dictionary" => false}]}
-      to = %{"fields" => [%{"name" => "x", "type" => "int64", "required" => true, "dictionary" => false}]}
+      from = %{
+        "fields" => [
+          %{"name" => "x", "type" => "int32", "required" => true, "dictionary" => false}
+        ]
+      }
+
+      to = %{
+        "fields" => [
+          %{"name" => "x", "type" => "int64", "required" => true, "dictionary" => false}
+        ]
+      }
+
       assert {:error, :non_additive} = DDL.alter_for_descriptor_change("t", from, to)
     end
   end

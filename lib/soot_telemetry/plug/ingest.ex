@@ -256,7 +256,10 @@ defmodule SootTelemetry.Plug.Ingest do
   defp response_for(:method_not_allowed), do: {405, "method_not_allowed", [], %{}}
   defp response_for(:missing_mtls_actor), do: {401, "mtls_required", [], %{}}
   defp response_for(:missing_stream_name), do: {400, "missing_stream_name", [], %{}}
-  defp response_for({:unknown_stream, name}), do: {404, "unknown_stream", [], %{stream: to_string(name)}}
+
+  defp response_for({:unknown_stream, name}),
+    do: {404, "unknown_stream", [], %{stream: to_string(name)}}
+
   defp response_for({:stream_unavailable, status}),
     do: {423, "stream_unavailable", [], %{status: Atom.to_string(status)}}
 
@@ -273,6 +276,7 @@ defmodule SootTelemetry.Plug.Ingest do
        }}
 
   defp response_for({:missing_header, name}), do: {400, "missing_header", [], %{header: name}}
+
   defp response_for({:invalid_header, name, raw}),
     do: {400, "invalid_header", [], %{header: name, value: raw}}
 

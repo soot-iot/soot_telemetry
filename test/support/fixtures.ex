@@ -4,8 +4,8 @@ defmodule SootTelemetry.Test.Fixtures.Vibration do
 
   telemetry_stream do
     name :vibration
-    tenant_scope :per_tenant
-    retention months: 12
+    tenant_scope(:per_tenant)
+    retention(months: 12)
 
     fields do
       field :ts, :timestamp_us, required: true
@@ -19,9 +19,9 @@ defmodule SootTelemetry.Test.Fixtures.Vibration do
     end
 
     clickhouse do
-      engine "MergeTree"
-      order_by [:tenant_id, :device_id, :ts]
-      partition_by "toYYYYMM(ts)"
+      engine("MergeTree")
+      order_by([:tenant_id, :device_id, :ts])
+      partition_by("toYYYYMM(ts)")
     end
   end
 end
@@ -32,7 +32,7 @@ defmodule SootTelemetry.Test.Fixtures.Power do
 
   telemetry_stream do
     name :power
-    tenant_scope :per_tenant
+    tenant_scope(:per_tenant)
 
     fields do
       field :ts, :timestamp_us, required: true
@@ -43,8 +43,8 @@ defmodule SootTelemetry.Test.Fixtures.Power do
     end
 
     clickhouse do
-      engine "MergeTree"
-      order_by [:tenant_id, :device_id, :ts]
+      engine("MergeTree")
+      order_by([:tenant_id, :device_id, :ts])
     end
   end
 end

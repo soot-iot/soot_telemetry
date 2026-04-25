@@ -88,7 +88,11 @@ defmodule SootTelemetry.ClickHouse.DDL do
   """
   @spec alter_for_descriptor_change(String.t(), map(), map()) ::
           {:ok, [String.t()]} | {:error, :non_additive}
-  def alter_for_descriptor_change(table, %{"fields" => from} = _from_desc, %{"fields" => to} = _to_desc) do
+  def alter_for_descriptor_change(
+        table,
+        %{"fields" => from} = _from_desc,
+        %{"fields" => to} = _to_desc
+      ) do
     diff(from, to, table)
   end
 

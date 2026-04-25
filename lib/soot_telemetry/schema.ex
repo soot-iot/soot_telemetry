@@ -53,7 +53,9 @@ defmodule SootTelemetry.Schema do
 
   identities do
     identity :unique_fingerprint, [:fingerprint], pre_check_with: SootTelemetry.Domain
-    identity :unique_version_per_stream, [:stream_name, :version], pre_check_with: SootTelemetry.Domain
+
+    identity :unique_version_per_stream, [:stream_name, :version],
+      pre_check_with: SootTelemetry.Domain
   end
 
   actions do

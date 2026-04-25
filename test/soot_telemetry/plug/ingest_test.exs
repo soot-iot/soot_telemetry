@@ -56,7 +56,9 @@ defmodule SootTelemetry.Plug.IngestTest do
       assert conn.resp_body == ""
 
       {:ok, session} =
-        IngestSession.for_device_stream(ctx.actor.certificate_id, ctx.stream.id, authorize?: false)
+        IngestSession.for_device_stream(ctx.actor.certificate_id, ctx.stream.id,
+          authorize?: false
+        )
 
       assert session.batch_count == 1
       assert session.byte_count == byte_size("fake-arrow-bytes")
@@ -71,7 +73,9 @@ defmodule SootTelemetry.Plug.IngestTest do
       assert conn.status == 204
 
       {:ok, session} =
-        IngestSession.for_device_stream(ctx.actor.certificate_id, ctx.stream.id, authorize?: false)
+        IngestSession.for_device_stream(ctx.actor.certificate_id, ctx.stream.id,
+          authorize?: false
+        )
 
       assert session.batch_count == 2
       assert session.sequence_high_water == 19
@@ -102,8 +106,8 @@ defmodule SootTelemetry.Plug.IngestTest do
 
     test "unknown stream → 404", ctx do
       headers = [
-        {"x-stream", "no_such_stream"} |
-        Enum.reject(valid_headers(ctx.schema), fn {k, _} -> k == "x-stream" end)
+        {"x-stream", "no_such_stream"}
+        | Enum.reject(valid_headers(ctx.schema), fn {k, _} -> k == "x-stream" end)
       ]
 
       conn =
@@ -118,7 +122,9 @@ defmodule SootTelemetry.Plug.IngestTest do
     end
 
     test "missing fingerprint header → 400", ctx do
-      headers = Enum.reject(valid_headers(ctx.schema), fn {k, _} -> k == "x-schema-fingerprint" end)
+      headers =
+        Enum.reject(valid_headers(ctx.schema), fn {k, _} -> k == "x-schema-fingerprint" end)
+
       conn = request(ctx.actor, :vibration, "x", headers)
 
       assert conn.status == 400
@@ -129,7 +135,9 @@ defmodule SootTelemetry.Plug.IngestTest do
       headers =
         valid_headers(ctx.schema)
         |> Enum.reject(fn {k, _} -> k == "x-schema-fingerprint" end)
-        |> Kernel.++([{"x-schema-fingerprint", "00" <> String.slice(ctx.schema.fingerprint, 2..-1//1)}])
+        |> Kernel.++([
+          {"x-schema-fingerprint", "00" <> String.slice(ctx.schema.fingerprint, 2..-1//1)}
+        ])
 
       conn = request(ctx.actor, :vibration, "x", headers)
 
