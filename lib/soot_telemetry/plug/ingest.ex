@@ -42,7 +42,7 @@ defmodule SootTelemetry.Plug.Ingest do
   alias AshPki.Plug.MTLS.Actor
   alias SootTelemetry.{IngestSession, RateLimiter, Schema, StreamRow, Writer}
 
-  @max_body_bytes 16 * 1024 * 1024
+  @default_max_body_bytes 16 * 1024 * 1024
   @sequence_grace_window 16
 
   @impl true
@@ -61,7 +61,7 @@ defmodule SootTelemetry.Plug.Ingest do
          {:ok, seq_start, seq_end} <- read_sequence_headers(conn),
          :ok <- check_sequence(actor, stream, seq_start),
          :ok <- check_rate_limits(actor, stream, opts),
-         {:ok, body} <- read_request_body(conn),
+         {:ok, body} <- read_request_body(conn, opts),
          :ok <- write_batch(body, stream, schema, actor, seq_start, seq_end) do
       record_session(actor, stream, byte_size(body), seq_end)
 
@@ -177,29 +177,17 @@ defmodule SootTelemetry.Plug.Ingest do
     end
   end
 
-  # Convention: the SPIFFE-style URI SAN encodes the tenant slug —
-  # `URI:device://<tenant>/devices/<serial>`. If the device's cert
-  # doesn't follow that, fall back to nil.
-  defp tenant_id_from_actor(%Actor{san: san}) when is_list(san) do
-    Enum.find_value(san, fn
-      {:uniformResourceIdentifier, charlist} ->
-        case String.split(List.to_string(charlist), "/") do
-          ["device:", "", tenant | _] -> tenant
-          _ -> nil
-        end
-
-      _ ->
-        nil
-    end)
-  end
-
-  defp tenant_id_from_actor(_), do: nil
+  defp tenant_id_from_actor(actor),
+    do: SootTelemetry.Plug.Ingest.TenantSan.resolve(actor)
 
   # ─── body + side effects ──────────────────────────────────────────────
 
-  defp read_request_body(conn) do
-    case Plug.Conn.read_body(conn, length: @max_body_bytes) do
-      {:ok, body, _conn} -> {:ok, body}
+  defp read_request_body(conn, opts) do
+    limit = Keyword.get(opts, :max_body_bytes, @default_max_body_bytes)
+
+    case Plug.Conn.read_body(conn, length: limit) do
+      {:ok, body, _conn} when byte_size(body) <= limit -> {:ok, body}
+      {:ok, _, _} -> {:error, :body_too_large}
       {:more, _, _} -> {:error, :body_too_large}
       {:error, _} -> {:error, :body_read_failed}
     end
