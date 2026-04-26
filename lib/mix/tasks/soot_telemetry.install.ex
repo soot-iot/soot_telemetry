@@ -2,7 +2,7 @@ defmodule Mix.Tasks.SootTelemetry.Install.Docs do
   @moduledoc false
 
   def short_doc do
-    "Installs soot_telemetry resources, ClickHouse config, and migration scaffolding"
+    "Installs soot_telemetry: registers domain, plants default streams (cpu/memory/disk), wires /ingest"
   end
 
   def example do
@@ -13,14 +13,28 @@ defmodule Mix.Tasks.SootTelemetry.Install.Docs do
     """
     #{short_doc()}
 
-    Generates a `Telemetry` Ash domain plus the `Schema`, `Stream`, and
-    `IngestSession` resource stubs in the operator's project, creates
-    the `priv/migrations/clickhouse/` output directory used by
-    `mix soot_telemetry.gen_migrations`, and wires a default
-    `clickhouse_url` into the dev/test configs. Composed by
-    `mix soot.install`; can also be run standalone.
+    `SootTelemetry.Domain` ships its `Schema`, `StreamRow`, and
+    `IngestSession` resources as concrete library modules. The
+    installer registers that domain in the operator's `:ash_domains`
+    config rather than generating empty copies.
 
-    See the `UI-SPEC.md` in the `soot` package for the full design.
+    Stream **DSL modules** (`use SootTelemetry.Stream`) are operator-
+    owned because they encode each operator's specific schema choices.
+    The installer plants three defaults that every IoT deployment
+    cares about — `cpu`, `memory`, `disk` — under
+    `lib/<app>/telemetry/`.
+
+    With `--example` (the default at the umbrella level), the
+    installer also plants `outdoor_temperature` as a worked example of
+    a non-default sensor stream, the kind of thing a device-side
+    integration target lights up.
+
+    The installer mounts `forward "/ingest", SootTelemetry.Plug.Ingest`
+    inside the `:device_mtls` scope created by `soot_core.install`.
+
+    Composed by `mix soot.install`; can also be run standalone.
+
+    See `GENERATOR-SPEC.md` in the `soot` package for the full design.
 
     ## Example
 
@@ -30,9 +44,10 @@ defmodule Mix.Tasks.SootTelemetry.Install.Docs do
 
     ## Options
 
-      * `--example` — same shape as the rest of the Soot installers;
-        currently a no-op for `soot_telemetry` (the generated stubs are
-        already runnable). Reserved for future illustrative streams.
+      * `--example` / `--no-example` — when set, also generates the
+        `outdoor_temperature` example stream module. Default off when
+        the task is invoked directly; on when invoked via
+        `mix soot.install` (which defaults `--example` to true).
       * `--yes` — answer yes to dependency-fetching prompts.
     """
   end
@@ -60,73 +75,267 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      app = Igniter.Project.Application.app_name(igniter)
-      telemetry_module = Igniter.Project.Module.module_name(igniter, "Telemetry")
-      schema_module = Igniter.Project.Module.module_name(igniter, "Telemetry.Schema")
-      stream_module = Igniter.Project.Module.module_name(igniter, "Telemetry.Stream")
-      session_module = Igniter.Project.Module.module_name(igniter, "Telemetry.IngestSession")
+      options = igniter.args.options
 
       igniter
       |> Igniter.Project.Formatter.import_dep(:soot_telemetry)
-      |> create_telemetry_domain(telemetry_module, [
-        schema_module,
-        stream_module,
-        session_module
-      ])
-      |> create_resource_stub(schema_module, telemetry_module, "Schema")
-      |> create_resource_stub(stream_module, telemetry_module, "Stream")
-      |> create_resource_stub(session_module, telemetry_module, "IngestSession")
-      |> create_clickhouse_migrations_dir(app)
+      |> register_domain()
+      |> generate_default_streams()
+      |> maybe_generate_example_stream(options)
+      |> mount_ingest_route()
+      |> create_clickhouse_migrations_dir()
       |> configure_clickhouse_url()
-      |> note_next_steps()
+      |> note_next_steps(options)
     end
 
-    defp create_telemetry_domain(igniter, module, resources) do
-      resource_lines = Enum.map_join(resources, "\n", fn r -> "    resource #{inspect(r)}" end)
+    defp register_domain(igniter) do
+      app = Igniter.Project.Application.app_name(igniter)
 
-      Igniter.Project.Module.create_module(
+      Igniter.Project.Config.configure(
         igniter,
-        module,
-        """
-        @moduledoc \"\"\"
-        Telemetry domain — owns Schema, Stream, and IngestSession
-        resources for this operator's project.
-
-        Generated stub. Operators can add their own resources, policies,
-        and custom actions; the framework does not re-touch this file
-        once generated.
-        \"\"\"
-
-        use Ash.Domain
-
-        resources do
-        #{resource_lines}
+        "config.exs",
+        app,
+        [:ash_domains],
+        [SootTelemetry.Domain],
+        updater: fn list ->
+          Igniter.Code.List.prepend_new_to_list(list, SootTelemetry.Domain)
         end
-        """
       )
     end
 
-    defp create_resource_stub(igniter, module, domain, label) do
-      Igniter.Project.Module.create_module(
-        igniter,
-        module,
-        """
-        @moduledoc \"\"\"
-        #{label} resource stub generated by `mix soot_telemetry.install`.
-
-        Extend with attributes, actions, and relationships as needed;
-        the framework does not re-touch this file once generated.
-        \"\"\"
-
-        use Ash.Resource, domain: #{inspect(domain)}
-
-        actions do
-        end
-        """
-      )
+    defp generate_default_streams(igniter) do
+      igniter
+      |> generate_stream_module(:cpu, default_stream_body(:cpu))
+      |> generate_stream_module(:memory, default_stream_body(:memory))
+      |> generate_stream_module(:disk, default_stream_body(:disk))
     end
 
-    defp create_clickhouse_migrations_dir(igniter, _app) do
+    defp maybe_generate_example_stream(igniter, options) do
+      if options[:example] do
+        generate_stream_module(igniter, :outdoor_temperature, default_stream_body(:outdoor_temperature))
+      else
+        igniter
+      end
+    end
+
+    defp generate_stream_module(igniter, name, body) do
+      module = stream_module_name(igniter, name)
+
+      {exists?, igniter} = Igniter.Project.Module.module_exists(igniter, module)
+
+      if exists? do
+        igniter
+      else
+        Igniter.Project.Module.create_module(igniter, module, body)
+      end
+    end
+
+    defp stream_module_name(igniter, name) do
+      camel = name |> Atom.to_string() |> Macro.camelize()
+      Igniter.Project.Module.module_name(igniter, "Telemetry.#{camel}")
+    end
+
+    defp default_stream_body(:cpu) do
+      ~s'''
+      @moduledoc """
+      Default CPU telemetry stream — every IoT deployment cares about
+      load and per-mode CPU percentages. Generated by
+      `mix soot_telemetry.install`. Operators own this file post-install.
+      """
+
+      use SootTelemetry.Stream
+
+      telemetry_stream do
+        name :cpu
+        tenant_scope :per_tenant
+        retention months: 6
+
+        fields do
+          field :ts, :timestamp_us, required: true
+          field :ingest_ts, :timestamp_us, server_set: true
+          field :device_id, :string, dictionary: true
+          field :tenant_id, :string, dictionary: true, server_set: true
+          field :sequence, :uint64, monotonic: true
+
+          field :load_1m, :float32
+          field :load_5m, :float32
+          field :load_15m, :float32
+          field :user_pct, :float32
+          field :system_pct, :float32
+          field :iowait_pct, :float32
+        end
+
+        clickhouse do
+          engine "MergeTree"
+          order_by [:tenant_id, :device_id, :ts]
+          partition_by "toYYYYMM(ts)"
+        end
+      end
+      '''
+    end
+
+    defp default_stream_body(:memory) do
+      ~s'''
+      @moduledoc """
+      Default memory telemetry stream — used/total bytes, swap, cache.
+      Generated by `mix soot_telemetry.install`. Operators own this file.
+      """
+
+      use SootTelemetry.Stream
+
+      telemetry_stream do
+        name :memory
+        tenant_scope :per_tenant
+        retention months: 6
+
+        fields do
+          field :ts, :timestamp_us, required: true
+          field :ingest_ts, :timestamp_us, server_set: true
+          field :device_id, :string, dictionary: true
+          field :tenant_id, :string, dictionary: true, server_set: true
+          field :sequence, :uint64, monotonic: true
+
+          field :total_bytes, :uint64
+          field :used_bytes, :uint64
+          field :available_bytes, :uint64
+          field :cached_bytes, :uint64
+          field :swap_total_bytes, :uint64
+          field :swap_used_bytes, :uint64
+        end
+
+        clickhouse do
+          engine "MergeTree"
+          order_by [:tenant_id, :device_id, :ts]
+          partition_by "toYYYYMM(ts)"
+        end
+      end
+      '''
+    end
+
+    defp default_stream_body(:disk) do
+      ~s'''
+      @moduledoc """
+      Default disk telemetry stream — per mount point bytes + inodes.
+      Generated by `mix soot_telemetry.install`. Operators own this file.
+      """
+
+      use SootTelemetry.Stream
+
+      telemetry_stream do
+        name :disk
+        tenant_scope :per_tenant
+        retention months: 6
+
+        fields do
+          field :ts, :timestamp_us, required: true
+          field :ingest_ts, :timestamp_us, server_set: true
+          field :device_id, :string, dictionary: true
+          field :tenant_id, :string, dictionary: true, server_set: true
+          field :sequence, :uint64, monotonic: true
+
+          field :mount_point, :string, dictionary: true, required: true
+          field :total_bytes, :uint64
+          field :used_bytes, :uint64
+          field :available_bytes, :uint64
+          field :inode_total, :uint64
+          field :inode_used, :uint64
+        end
+
+        clickhouse do
+          engine "MergeTree"
+          order_by [:tenant_id, :device_id, :mount_point, :ts]
+          partition_by "toYYYYMM(ts)"
+        end
+      end
+      '''
+    end
+
+    defp default_stream_body(:outdoor_temperature) do
+      ~s'''
+      @moduledoc """
+      Example outdoor-temperature stream demonstrating a non-default
+      sensor schema. Generated by `mix soot_telemetry.install --example`.
+      Operators own this file post-install — edit fields to match the
+      real sensor or delete entirely if not needed.
+
+      The companion device-side example publishes
+      `{celsius, humidity_pct, sensor_id}` here on a configurable
+      interval (see the device-shadow `weather_*` keys).
+      """
+
+      use SootTelemetry.Stream
+
+      telemetry_stream do
+        name :outdoor_temperature
+        tenant_scope :per_tenant
+        retention months: 24
+
+        fields do
+          field :ts, :timestamp_us, required: true
+          field :ingest_ts, :timestamp_us, server_set: true
+          field :device_id, :string, dictionary: true
+          field :tenant_id, :string, dictionary: true, server_set: true
+          field :sequence, :uint64, monotonic: true
+
+          field :celsius, :float32, required: true
+          field :humidity_pct, :float32
+          field :sensor_id, :string, dictionary: true
+        end
+
+        clickhouse do
+          engine "MergeTree"
+          order_by [:tenant_id, :device_id, :ts]
+          partition_by "toYYYYMM(ts)"
+        end
+      end
+      '''
+    end
+
+    # Adds `forward "/ingest", SootTelemetry.Plug.Ingest` inside the
+    # `:device_mtls` scope. Idempotent: detects an existing forward to
+    # SootTelemetry.Plug.Ingest and leaves the router alone if found.
+    defp mount_ingest_route(igniter) do
+      {igniter, router} =
+        Igniter.Libs.Phoenix.select_router(
+          igniter,
+          "Which Phoenix router should the /ingest endpoint be mounted in?"
+        )
+
+      cond do
+        router == nil ->
+          Igniter.add_warning(igniter, """
+          No Phoenix router found. The /ingest device-facing endpoint
+          was not mounted. After your router is set up, re-run
+          `mix igniter.install soot_telemetry`.
+          """)
+
+        ingest_route_present?(igniter, router) ->
+          igniter
+
+        true ->
+          Igniter.Libs.Phoenix.append_to_scope(
+            igniter,
+            "/",
+            ~s|forward "/ingest", SootTelemetry.Plug.Ingest|,
+            router: router,
+            with_pipelines: [:device_mtls]
+          )
+      end
+    end
+
+    defp ingest_route_present?(igniter, router) do
+      {_, _source, zipper} = Igniter.Project.Module.find_module!(igniter, router)
+
+      case Igniter.Code.Common.move_to(zipper, fn z ->
+             Igniter.Code.Function.function_call?(z, :forward, 2) and
+               Igniter.Code.Function.argument_equals?(z, 1, SootTelemetry.Plug.Ingest)
+           end) do
+        {:ok, _} -> true
+        :error -> false
+      end
+    end
+
+    defp create_clickhouse_migrations_dir(igniter) do
       Igniter.create_new_file(
         igniter,
         "priv/migrations/clickhouse/.gitkeep",
@@ -151,17 +360,25 @@ if Code.ensure_loaded?(Igniter) do
       )
     end
 
-    defp note_next_steps(igniter) do
+    defp note_next_steps(igniter, options) do
+      example_lines =
+        if options[:example] do
+          "  lib/<app>/telemetry/outdoor_temperature.ex   example sensor stream\n"
+        else
+          ""
+        end
+
       Igniter.add_notice(igniter, """
       soot_telemetry installed.
 
-      Generated:
+      Default streams (operator-owned, edit freely):
 
-        lib/<app>/telemetry.ex            Ash domain
-        lib/<app>/telemetry/schema.ex     Schema resource stub
-        lib/<app>/telemetry/stream.ex     Stream resource stub
-        lib/<app>/telemetry/ingest_session.ex
-        priv/migrations/clickhouse/       ClickHouse DDL output dir
+        lib/<app>/telemetry/cpu.ex                   load + per-mode pct
+        lib/<app>/telemetry/memory.ex                used/total/swap bytes
+        lib/<app>/telemetry/disk.ex                  per-mount bytes + inodes
+      #{example_lines}
+      `SootTelemetry.Domain` is registered in `:ash_domains`.
+      `/ingest` is mounted under the `:device_mtls` pipeline.
 
       Next steps:
 
@@ -171,6 +388,10 @@ if Code.ensure_loaded?(Igniter) do
       The `:soot_telemetry, :clickhouse_url` key has been seeded in
       `config/dev.exs` and `config/test.exs`. Override in
       `config/runtime.exs` for production.
+
+      Register your stream modules at boot via
+      `SootTelemetry.Registry.register_all/1` (typically from your
+      Application supervision tree).
       """)
     end
   end

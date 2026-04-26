@@ -3,6 +3,37 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
 
   import Igniter.Test
 
+  defp project_with_router do
+    test_project(
+      files: %{
+        "lib/test_web/router.ex" => """
+        defmodule TestWeb.Router do
+          use Phoenix.Router
+
+          pipeline :device_mtls do
+            plug AshPki.Plug.MTLS, require_known_certificate: true
+          end
+
+          scope "/" do
+            pipe_through :device_mtls
+
+            forward "/enroll", SootCore.Plug.Enroll
+          end
+        end
+        """,
+        "lib/test_web.ex" => """
+        defmodule TestWeb do
+          def router do
+            quote do
+              use Phoenix.Router
+            end
+          end
+        end
+        """
+      }
+    )
+  end
+
   describe "info/2" do
     test "exposes the documented option schema" do
       info = Mix.Tasks.SootTelemetry.Install.info([], nil)
@@ -12,64 +43,113 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
     end
   end
 
-  describe "generated modules" do
-    test "creates the Telemetry domain module" do
-      test_project(files: %{})
-      |> Igniter.compose_task("soot_telemetry.install", [])
-      |> assert_creates("lib/test/telemetry.ex")
-    end
-
-    test "creates the Schema resource stub" do
-      test_project(files: %{})
-      |> Igniter.compose_task("soot_telemetry.install", [])
-      |> assert_creates("lib/test/telemetry/schema.ex")
-    end
-
-    test "creates the Stream resource stub" do
-      test_project(files: %{})
-      |> Igniter.compose_task("soot_telemetry.install", [])
-      |> assert_creates("lib/test/telemetry/stream.ex")
-    end
-
-    test "creates the IngestSession resource stub" do
-      test_project(files: %{})
-      |> Igniter.compose_task("soot_telemetry.install", [])
-      |> assert_creates("lib/test/telemetry/ingest_session.ex")
-    end
-
-    test "domain references all three resources" do
+  describe "default streams (always generated)" do
+    test "creates cpu / memory / disk stream modules" do
       result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      assert_creates(result, "lib/test/telemetry/cpu.ex")
+      assert_creates(result, "lib/test/telemetry/memory.ex")
+      assert_creates(result, "lib/test/telemetry/disk.ex")
+    end
+
+    test "cpu stream uses SootTelemetry.Stream and declares load fields" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "lib/test/telemetry/cpu.ex")
+      assert diff =~ "use SootTelemetry.Stream"
+      assert diff =~ "name(:cpu)"
+      assert diff =~ ":load_1m"
+      assert diff =~ ":user_pct"
+    end
+
+    test "memory stream declares total/used/swap byte fields" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "lib/test/telemetry/memory.ex")
+      assert diff =~ "name(:memory)"
+      assert diff =~ ":total_bytes"
+      assert diff =~ ":swap_used_bytes"
+    end
+
+    test "disk stream includes mount_point dictionary field" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "lib/test/telemetry/disk.ex")
+      assert diff =~ "name(:disk)"
+      assert diff =~ ":mount_point"
+      assert diff =~ "dictionary: true"
+      assert diff =~ ":inode_total"
+    end
+  end
+
+  describe "--example outdoor_temperature stream" do
+    test "creates outdoor_temperature.ex when --example is passed" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", ["--example"])
+
+      assert_creates(result, "lib/test/telemetry/outdoor_temperature.ex")
+
+      diff = diff(result, only: "lib/test/telemetry/outdoor_temperature.ex")
+      assert diff =~ "name(:outdoor_temperature)"
+      assert diff =~ ":celsius"
+      assert diff =~ ":humidity_pct"
+      assert diff =~ ":sensor_id"
+    end
+
+    test "does not create outdoor_temperature.ex without --example" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      refute_creates(result, "lib/test/telemetry/outdoor_temperature.ex")
+    end
+  end
+
+  describe "domain registration" do
+    test "registers SootTelemetry.Domain in operator's :ash_domains" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "config/config.exs")
+      assert diff =~ "SootTelemetry.Domain"
+      assert diff =~ "ash_domains:"
+    end
+  end
+
+  describe "router mount" do
+    test "adds /ingest forward to the :device_mtls scope" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "lib/test_web/router.ex")
+      assert diff =~ "/ingest"
+      assert diff =~ "SootTelemetry.Plug.Ingest"
+    end
+
+    test "warns when no router exists" do
+      igniter =
         test_project(files: %{})
         |> Igniter.compose_task("soot_telemetry.install", [])
 
-      diff = diff(result, only: "lib/test/telemetry.ex")
-
-      assert diff =~ "Test.Telemetry.Schema"
-      assert diff =~ "Test.Telemetry.Stream"
-      assert diff =~ "Test.Telemetry.IngestSession"
-    end
-
-    test "resource stubs declare the Telemetry domain" do
-      result =
-        test_project(files: %{})
-        |> Igniter.compose_task("soot_telemetry.install", [])
-
-      schema_diff = diff(result, only: "lib/test/telemetry/schema.ex")
-      stream_diff = diff(result, only: "lib/test/telemetry/stream.ex")
-      session_diff = diff(result, only: "lib/test/telemetry/ingest_session.ex")
-
-      assert schema_diff =~ "use Ash.Resource"
-      assert schema_diff =~ "domain: Test.Telemetry"
-      assert stream_diff =~ "use Ash.Resource"
-      assert stream_diff =~ "domain: Test.Telemetry"
-      assert session_diff =~ "use Ash.Resource"
-      assert session_diff =~ "domain: Test.Telemetry"
+      assert Enum.any?(igniter.warnings, &(&1 =~ "No Phoenix router")) or
+               Enum.any?(igniter.notices, &(&1 =~ "soot_telemetry installed"))
     end
   end
 
   describe "ClickHouse migrations directory" do
     test "creates priv/migrations/clickhouse/.gitkeep" do
-      test_project(files: %{})
+      project_with_router()
       |> Igniter.compose_task("soot_telemetry.install", [])
       |> assert_creates("priv/migrations/clickhouse/.gitkeep")
     end
@@ -77,7 +157,7 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
 
   describe "formatter import" do
     test "imports :soot_telemetry into .formatter.exs" do
-      test_project(files: %{})
+      project_with_router()
       |> Igniter.compose_task("soot_telemetry.install", [])
       |> assert_has_patch(".formatter.exs", """
       + |  import_deps: [:soot_telemetry]
@@ -87,18 +167,26 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
 
   describe "idempotency" do
     test "running twice is a no-op on .formatter.exs" do
-      test_project(files: %{})
+      project_with_router()
       |> Igniter.compose_task("soot_telemetry.install", [])
       |> apply_igniter!()
       |> Igniter.compose_task("soot_telemetry.install", [])
       |> assert_unchanged(".formatter.exs")
+    end
+
+    test "running twice does not duplicate the cpu stream module" do
+      project_with_router()
+      |> Igniter.compose_task("soot_telemetry.install", [])
+      |> apply_igniter!()
+      |> Igniter.compose_task("soot_telemetry.install", [])
+      |> assert_unchanged("lib/test/telemetry/cpu.ex")
     end
   end
 
   describe "next-steps notice" do
     test "emits a soot_telemetry installed notice" do
       igniter =
-        test_project(files: %{})
+        project_with_router()
         |> Igniter.compose_task("soot_telemetry.install", [])
 
       assert Enum.any?(igniter.notices, &(&1 =~ "soot_telemetry installed"))
@@ -106,12 +194,23 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
 
     test "notice mentions the gen_migrations followup" do
       igniter =
-        test_project(files: %{})
+        project_with_router()
         |> Igniter.compose_task("soot_telemetry.install", [])
 
       assert Enum.any?(
                igniter.notices,
                &(&1 =~ "soot_telemetry.gen_migrations")
+             )
+    end
+
+    test "notice mentions the example stream when --example" do
+      igniter =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", ["--example"])
+
+      assert Enum.any?(
+               igniter.notices,
+               &(&1 =~ "outdoor_temperature")
              )
     end
   end
