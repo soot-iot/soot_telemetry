@@ -76,6 +76,7 @@ defmodule SootTelemetry.MixProject do
       {:soot_core, path: "../soot_core"},
       {:plug, "~> 1.19"},
       {:jason, "~> 1.4"},
+      {:igniter, "~> 0.6", optional: true},
 
       # Dev / test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
