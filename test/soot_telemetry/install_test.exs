@@ -54,13 +54,13 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
       assert_creates(result, "lib/test/telemetry/disk.ex")
     end
 
-    test "cpu stream uses SootTelemetry.Stream and declares load fields" do
+    test "cpu stream uses SootTelemetry.Stream.Definition and declares load fields" do
       result =
         project_with_router()
         |> Igniter.compose_task("soot_telemetry.install", [])
 
       diff = diff(result, only: "lib/test/telemetry/cpu.ex")
-      assert diff =~ "use SootTelemetry.Stream"
+      assert diff =~ "use SootTelemetry.Stream.Definition"
       assert diff =~ "name(:cpu)"
       assert diff =~ ":load_1m"
       assert diff =~ ":user_pct"
