@@ -17,6 +17,21 @@ jobs:
         include:
           - { elixir: "1.18.4", otp: "28.3.2" }
 
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.4-alpine
+        ports:
+          - 8123:8123
+        env:
+          CLICKHOUSE_DB: default_test
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 -O - http://localhost:8123/ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 10s
+
     steps:
       - uses: actions/checkout@v4
 
