@@ -26,7 +26,7 @@ jobs:
           CLICKHOUSE_DB: default_test
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
         options: >-
-          --health-cmd "wget --no-verbose --tries=1 -O - http://localhost:8123/ping"
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
