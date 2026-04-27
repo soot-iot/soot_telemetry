@@ -7,6 +7,14 @@ the project adheres to semantic versioning.
 ## [Unreleased]
 
 ### Added
+- `SootTelemetry.Writer.ClickHouse` — pass-through writer over the
+  `:ch` driver. Forwards the request body verbatim to ClickHouse as
+  `INSERT INTO <table> FORMAT <format>` (default `ArrowStream`); no
+  decoding. Insert failures are logged at error level with full batch
+  context and surfaced as `{:error, {:clickhouse_insert_failed, _}}`
+  so the ingest plug returns a 500. Opt in by setting
+  `config :soot_telemetry, :writer, SootTelemetry.Writer.ClickHouse`;
+  `SootTelemetry.Application` then auto-starts the connection pool.
 - Configurable `max_body_bytes` plug option on `SootTelemetry.Plug.Ingest`.
 - `SootTelemetry.Plug.Ingest.TenantSan` — extracted SAN-tenant resolver
   with its own test surface.
