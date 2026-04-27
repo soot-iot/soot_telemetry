@@ -8,12 +8,15 @@ defmodule SootTelemetry.Registry do
   fingerprint reuses that schema row; a new fingerprint creates a new
   schema row, advances the version counter, and updates the stream's
   `current_schema_id`.
+
+  Resource modules are resolved through `SootTelemetry.schema/0` and
+  `SootTelemetry.stream_row/0` so consumer overrides registered via
+  app config (`config :soot_telemetry, schema: MyApp.Schema`, etc.) are
+  honoured at runtime.
   """
 
-  alias SootTelemetry.Schema
   alias SootTelemetry.Schema.Fingerprint
   alias SootTelemetry.Stream.Info
-  alias SootTelemetry.StreamRow
 
   @doc """
   Register or update a single stream module.
@@ -21,7 +24,7 @@ defmodule SootTelemetry.Registry do
   Returns `{:ok, %{schema: schema, stream: stream}}`.
   """
   @spec register(module(), keyword()) ::
-          {:ok, %{schema: Schema.t(), stream: StreamRow.t()}} | {:error, term()}
+          {:ok, %{schema: struct(), stream: struct()}} | {:error, term()}
   def register(module, opts \\ []) when is_atom(module) do
     name = Info.name(module)
     fingerprint = Fingerprint.compute(module)
@@ -35,7 +38,7 @@ defmodule SootTelemetry.Registry do
 
   @doc "Register every module in `modules`. Returns `{:ok, [%{...}, ...]}` or the first error."
   @spec register_all([module()], keyword()) ::
-          {:ok, [%{schema: Schema.t(), stream: StreamRow.t()}]} | {:error, term()}
+          {:ok, [%{schema: struct(), stream: struct()}]} | {:error, term()}
   def register_all(modules, opts \\ []) do
     Enum.reduce_while(modules, {:ok, []}, fn module, {:ok, acc} ->
       case register(module, opts) do
@@ -50,27 +53,31 @@ defmodule SootTelemetry.Registry do
   end
 
   defp ensure_schema(name, fingerprint, descriptor) do
-    case Schema.get_for_stream_fingerprint(name, fingerprint, authorize?: false) do
-      {:ok, %Schema{} = schema} ->
+    schema_module = SootTelemetry.schema()
+
+    case schema_module.get_for_stream_fingerprint(name, fingerprint, authorize?: false) do
+      {:ok, %_{} = schema} ->
         {:ok, schema}
 
       {:error, _} ->
         version = next_version(name)
-        Schema.create(name, version, fingerprint, descriptor, authorize?: false)
+        schema_module.create(name, version, fingerprint, descriptor, authorize?: false)
     end
   end
 
   defp next_version(name) do
-    case Schema.for_stream(name, authorize?: false) do
+    case SootTelemetry.schema().for_stream(name, authorize?: false) do
       {:ok, []} -> 1
       {:ok, schemas} -> (Enum.map(schemas, & &1.version) |> Enum.max()) + 1
       _ -> 1
     end
   end
 
-  defp upsert_stream(module, name, %Schema{} = schema, opts) do
-    case StreamRow.get_by_name(name, authorize?: false) do
-      {:ok, %StreamRow{} = stream} ->
+  defp upsert_stream(module, name, schema, opts) do
+    stream_module = SootTelemetry.stream_row()
+
+    case stream_module.get_by_name(name, authorize?: false) do
+      {:ok, %_{} = stream} ->
         if stream.current_schema_id == schema.id do
           {:ok, stream}
         else
@@ -81,7 +88,7 @@ defmodule SootTelemetry.Registry do
         end
 
       {:error, _} ->
-        StreamRow.create(
+        stream_module.create(
           name,
           module,
           tenant_scope_for(module),
