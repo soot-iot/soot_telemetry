@@ -43,8 +43,6 @@ defmodule SootTelemetry.Writer.ClickHouse do
 
   require Logger
 
-  alias SootTelemetry.StreamRow
-
   @default_format "ArrowStream"
   @default_pool_size 4
 
@@ -132,11 +130,11 @@ defmodule SootTelemetry.Writer.ClickHouse do
   defp resolve_table(nil), do: {:error, :missing_stream}
 
   defp resolve_table(stream_name) when is_atom(stream_name) do
-    case StreamRow.get_by_name(stream_name, authorize?: false) do
-      {:ok, %StreamRow{clickhouse_table: table}} when is_binary(table) and table != "" ->
+    case SootTelemetry.stream_row().get_by_name(stream_name, authorize?: false) do
+      {:ok, %{clickhouse_table: table}} when is_binary(table) and table != "" ->
         {:ok, table}
 
-      {:ok, %StreamRow{}} ->
+      {:ok, %_{}} ->
         {:ok, default_table(stream_name)}
 
       _ ->

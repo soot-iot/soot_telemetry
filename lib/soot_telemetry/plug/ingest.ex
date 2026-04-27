@@ -40,7 +40,7 @@ defmodule SootTelemetry.Plug.Ingest do
   require Logger
 
   alias AshPki.Plug.MTLS.Actor
-  alias SootTelemetry.{IngestSession, RateLimiter, Schema, StreamRow, Writer}
+  alias SootTelemetry.{RateLimiter, Writer}
 
   @default_max_body_bytes 16 * 1024 * 1024
   @sequence_grace_window 16
@@ -97,25 +97,25 @@ defmodule SootTelemetry.Plug.Ingest do
   end
 
   defp load_stream(name) do
-    case StreamRow.get_by_name(name, authorize?: false) do
-      {:ok, %StreamRow{} = stream} -> {:ok, stream}
+    case SootTelemetry.stream_row().get_by_name(name, authorize?: false) do
+      {:ok, %_{} = stream} -> {:ok, stream}
       _ -> {:error, {:unknown_stream, name}}
     end
   end
 
-  defp ensure_active(%StreamRow{status: :active}), do: :ok
-  defp ensure_active(%StreamRow{status: status}), do: {:error, {:stream_unavailable, status}}
+  defp ensure_active(%{status: :active}), do: :ok
+  defp ensure_active(%{status: status}), do: {:error, {:stream_unavailable, status}}
 
-  defp load_active_schema(%StreamRow{current_schema_id: id}) do
-    case Ash.get(Schema, id, authorize?: false) do
-      {:ok, %Schema{} = schema} -> {:ok, schema}
+  defp load_active_schema(%{current_schema_id: id}) do
+    case Ash.get(SootTelemetry.schema(), id, authorize?: false) do
+      {:ok, %_{} = schema} -> {:ok, schema}
       _ -> {:error, :no_active_schema}
     end
   end
 
   # ─── header validation ─────────────────────────────────────────────────
 
-  defp check_fingerprint(conn, %Schema{fingerprint: expected}) do
+  defp check_fingerprint(conn, %{fingerprint: expected}) do
     case header(conn, "x-schema-fingerprint") do
       nil ->
         {:error, :missing_fingerprint_header}
@@ -153,8 +153,10 @@ defmodule SootTelemetry.Plug.Ingest do
   end
 
   defp check_sequence(actor, stream, seq_start) do
-    case IngestSession.for_device_stream(actor.certificate_id, stream.id, authorize?: false) do
-      {:ok, %IngestSession{sequence_high_water: high_water}}
+    case SootTelemetry.ingest_session().for_device_stream(actor.certificate_id, stream.id,
+           authorize?: false
+         ) do
+      {:ok, %{sequence_high_water: high_water}}
       when seq_start + @sequence_grace_window < high_water ->
         {:error, {:sequence_regression, %{seen: high_water, got: seq_start}}}
 
@@ -210,12 +212,14 @@ defmodule SootTelemetry.Plug.Ingest do
   end
 
   defp record_session(actor, stream, bytes, seq_end) do
-    case IngestSession.for_device_stream(actor.certificate_id, stream.id, authorize?: false) do
-      {:ok, %IngestSession{} = session} ->
-        log_session_error(IngestSession.record_batch(session, bytes, seq_end, authorize?: false))
+    session_module = SootTelemetry.ingest_session()
+
+    case session_module.for_device_stream(actor.certificate_id, stream.id, authorize?: false) do
+      {:ok, %_{} = session} ->
+        log_session_error(session_module.record_batch(session, bytes, seq_end, authorize?: false))
 
       _ ->
-        IngestSession.create(
+        session_module.create(
           actor.certificate_id,
           tenant_id_from_actor(actor),
           stream.id,
@@ -226,7 +230,7 @@ defmodule SootTelemetry.Plug.Ingest do
         |> case do
           {:ok, session} ->
             log_session_error(
-              IngestSession.record_batch(session, bytes, seq_end, authorize?: false)
+              session_module.record_batch(session, bytes, seq_end, authorize?: false)
             )
 
           err ->
