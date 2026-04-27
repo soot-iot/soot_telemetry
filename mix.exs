@@ -72,8 +72,8 @@ defmodule SootTelemetry.MixProject do
     [
       {:ash, "~> 3.24"},
       {:spark, "~> 2.6"},
-      {:ash_pki, path: "../ash_pki"},
-      {:soot_core, path: "../soot_core"},
+      {:ash_pki, github: "soot-iot/ash_pki", branch: "main", override: true},
+      {:soot_core, github: "soot-iot/soot_core", branch: "main", override: true},
       {:plug, "~> 1.19"},
       {:jason, "~> 1.4"},
       {:ch, "~> 0.7"},
