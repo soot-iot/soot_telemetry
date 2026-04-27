@@ -1,5 +1,7 @@
 defmodule SootTelemetry.Schema do
   @moduledoc """
+  Default `Schema` resource shipped with `soot_telemetry`.
+
   An immutable, versioned snapshot of a stream's Arrow schema.
 
   One row per `(stream_name, fingerprint)` pair. The current row for a
@@ -7,93 +9,20 @@ defmodule SootTelemetry.Schema do
   `SootTelemetry.StreamRow.current_schema_id`. Field values are never
   rewritten — new schemas land as new rows. The only mutations are
   status transitions: `:active → :deprecated → :retired`.
+
+  The schema is provided by the `SootTelemetry.Resource.Schema` extension.
+  This default uses `Ash.DataLayer.Ets`; production deployments override
+  with their own resource module backed by `AshPostgres.DataLayer` and
+  register it via `config :soot_telemetry, schema: MyApp.TelemetrySchema`.
   """
 
   use Ash.Resource,
     otp_app: :soot_telemetry,
     domain: SootTelemetry.Domain,
-    data_layer: Ash.DataLayer.Ets
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [SootTelemetry.Resource.Schema]
 
   ets do
     private? false
-  end
-
-  attributes do
-    uuid_primary_key :id
-
-    attribute :stream_name, :atom do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :version, :integer do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :fingerprint, :string do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :descriptor, :map do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :status, :atom do
-      constraints one_of: [:active, :deprecated, :retired]
-      default :active
-      allow_nil? false
-      public? true
-    end
-
-    create_timestamp :inserted_at
-    update_timestamp :updated_at
-  end
-
-  identities do
-    identity :unique_fingerprint_per_stream, [:stream_name, :fingerprint],
-      pre_check_with: SootTelemetry.Domain
-
-    identity :unique_version_per_stream, [:stream_name, :version],
-      pre_check_with: SootTelemetry.Domain
-  end
-
-  actions do
-    defaults [:read, :destroy, create: [:stream_name, :version, :fingerprint, :descriptor]]
-
-    update :deprecate do
-      accept []
-      require_atomic? false
-      change set_attribute(:status, :deprecated)
-    end
-
-    update :retire do
-      accept []
-      require_atomic? false
-      change set_attribute(:status, :retired)
-    end
-
-    read :get_for_stream_fingerprint do
-      argument :stream_name, :atom, allow_nil?: false
-      argument :fingerprint, :string, allow_nil?: false
-      get? true
-      filter expr(stream_name == ^arg(:stream_name) and fingerprint == ^arg(:fingerprint))
-    end
-
-    read :for_stream do
-      argument :stream_name, :atom, allow_nil?: false
-      filter expr(stream_name == ^arg(:stream_name))
-      prepare build(sort: [version: :desc])
-    end
-  end
-
-  code_interface do
-    define :create, args: [:stream_name, :version, :fingerprint, :descriptor]
-    define :deprecate
-    define :retire
-    define :get_for_stream_fingerprint, args: [:stream_name, :fingerprint]
-    define :for_stream, args: [:stream_name]
   end
 end
