@@ -33,9 +33,8 @@ defmodule SootTelemetry.Plug.Ingest.TenantSanTest do
     end
 
     test "returns nil for a URI that doesn't match the convention" do
-      assert TenantSan.resolve(
-               actor([{:uniformResourceIdentifier, ~c"https://example.com"}])
-             ) == nil
+      assert TenantSan.resolve(actor([{:uniformResourceIdentifier, ~c"https://example.com"}])) ==
+               nil
     end
 
     test "returns nil when no URI entries exist" do

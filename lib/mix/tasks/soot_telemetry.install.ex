@@ -112,7 +112,11 @@ if Code.ensure_loaded?(Igniter) do
 
     defp maybe_generate_example_stream(igniter, options) do
       if options[:example] do
-        generate_stream_module(igniter, :outdoor_temperature, default_stream_body(:outdoor_temperature))
+        generate_stream_module(
+          igniter,
+          :outdoor_temperature,
+          default_stream_body(:outdoor_temperature)
+        )
       else
         igniter
       end
