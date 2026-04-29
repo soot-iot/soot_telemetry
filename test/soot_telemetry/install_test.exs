@@ -3,6 +3,32 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
 
   import Igniter.Test
 
+  # Igniter.compose_task evaluates the generated config.exs into the
+  # test VM's Application env, which leaves keys set for the rest of
+  # the suite. Snapshot the relevant `:soot_telemetry` keys before each
+  # test and restore them on exit so unrelated tests (e.g. Plug.Ingest
+  # ones that should run with the Writer.Noop default) aren't poisoned.
+  @leaked_keys [:writer, :clickhouse_url]
+
+  setup do
+    snapshot =
+      for key <- @leaked_keys,
+          {:ok, value} <- [Application.fetch_env(:soot_telemetry, key)],
+          do: {key, value}
+
+    on_exit(fn ->
+      for key <- @leaked_keys do
+        Application.delete_env(:soot_telemetry, key)
+      end
+
+      for {key, value} <- snapshot do
+        Application.put_env(:soot_telemetry, key, value)
+      end
+    end)
+
+    :ok
+  end
+
   defp project_with_router do
     test_project(
       files: %{
