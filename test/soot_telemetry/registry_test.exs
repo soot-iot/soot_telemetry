@@ -45,10 +45,10 @@ defmodule SootTelemetry.RegistryTest do
     {:ok, results} = Registry.register_all([Vibration, Power])
     assert length(results) == 2
 
-    {:ok, schemas} = Ash.read(Schema)
+    {:ok, schemas} = Ash.read(Schema, authorize?: false)
     assert length(schemas) == 2
 
-    {:ok, streams} = Ash.read(StreamRow)
+    {:ok, streams} = Ash.read(StreamRow, authorize?: false)
     assert length(streams) == 2
   end
 
