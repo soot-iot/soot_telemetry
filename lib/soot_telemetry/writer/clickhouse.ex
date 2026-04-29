@@ -130,7 +130,9 @@ defmodule SootTelemetry.Writer.ClickHouse do
   defp resolve_table(nil), do: {:error, :missing_stream}
 
   defp resolve_table(stream_name) when is_atom(stream_name) do
-    case SootTelemetry.stream_row().get_by_name(stream_name, authorize?: false) do
+    case SootTelemetry.stream_row().get_by_name(stream_name,
+           actor: SootTelemetry.Actors.system(:registry_sync)
+         ) do
       {:ok, %{clickhouse_table: table}} when is_binary(table) and table != "" ->
         {:ok, table}
 

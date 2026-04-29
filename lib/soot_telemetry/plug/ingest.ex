@@ -97,7 +97,7 @@ defmodule SootTelemetry.Plug.Ingest do
   end
 
   defp load_stream(name) do
-    case SootTelemetry.stream_row().get_by_name(name, authorize?: false) do
+    case SootTelemetry.stream_row().get_by_name(name, actor: registry_sync()) do
       {:ok, %_{} = stream} -> {:ok, stream}
       _ -> {:error, {:unknown_stream, name}}
     end
@@ -107,7 +107,7 @@ defmodule SootTelemetry.Plug.Ingest do
   defp ensure_active(%{status: status}), do: {:error, {:stream_unavailable, status}}
 
   defp load_active_schema(%{current_schema_id: id}) do
-    case Ash.get(SootTelemetry.schema(), id, authorize?: false) do
+    case Ash.get(SootTelemetry.schema(), id, actor: registry_sync()) do
       {:ok, %_{} = schema} -> {:ok, schema}
       _ -> {:error, :no_active_schema}
     end
@@ -154,7 +154,7 @@ defmodule SootTelemetry.Plug.Ingest do
 
   defp check_sequence(actor, stream, seq_start) do
     case SootTelemetry.ingest_session().for_device_stream(actor.certificate_id, stream.id,
-           authorize?: false
+           actor: ingest_session_writer()
          ) do
       {:ok, %{sequence_high_water: high_water}}
       when seq_start + @sequence_grace_window < high_water ->
@@ -213,10 +213,11 @@ defmodule SootTelemetry.Plug.Ingest do
 
   defp record_session(actor, stream, bytes, seq_end) do
     session_module = SootTelemetry.ingest_session()
+    sys = ingest_session_writer()
 
-    case session_module.for_device_stream(actor.certificate_id, stream.id, authorize?: false) do
+    case session_module.for_device_stream(actor.certificate_id, stream.id, actor: sys) do
       {:ok, %_{} = session} ->
-        log_session_error(session_module.record_batch(session, bytes, seq_end, authorize?: false))
+        log_session_error(session_module.record_batch(session, bytes, seq_end, actor: sys))
 
       _ ->
         session_module.create(
@@ -225,19 +226,20 @@ defmodule SootTelemetry.Plug.Ingest do
           stream.id,
           stream.name,
           DateTime.utc_now(),
-          authorize?: false
+          actor: sys
         )
         |> case do
           {:ok, session} ->
-            log_session_error(
-              session_module.record_batch(session, bytes, seq_end, authorize?: false)
-            )
+            log_session_error(session_module.record_batch(session, bytes, seq_end, actor: sys))
 
           err ->
             log_session_error(err)
         end
     end
   end
+
+  defp registry_sync, do: SootTelemetry.Actors.system(:registry_sync)
+  defp ingest_session_writer, do: SootTelemetry.Actors.system(:ingest_session_writer)
 
   defp log_session_error({:ok, _} = ok), do: ok
 
