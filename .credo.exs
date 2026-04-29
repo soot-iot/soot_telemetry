@@ -41,7 +41,7 @@
       # If you create your own checks, you must specify the source files for
       # them here, so they can be loaded by Credo before running the analysis.
       #
-      requires: [],
+      requires: ["priv/credo/checks/no_authorize_false.ex"],
       #
       # If you want to enforce a style guide and need a more traditional linting
       # experience, you can change `strict` to `true` below:
@@ -75,6 +75,9 @@
           {Credo.Check.Consistency.SpaceAroundOperators, []},
           {Credo.Check.Consistency.SpaceInParentheses, []},
           {Credo.Check.Consistency.TabsOrSpaces, []},
+
+          # POLICY-SPEC §7: production code never bypasses Ash policies.
+          {SootTelemetry.Credo.NoAuthorizeFalse, []},
 
           #
           ## Design Checks
