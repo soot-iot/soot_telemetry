@@ -20,9 +20,19 @@ defmodule SootTelemetry.StreamRow do
     otp_app: :soot_telemetry,
     domain: SootTelemetry.Domain,
     data_layer: Ash.DataLayer.Ets,
+    authorizers: [Ash.Policy.Authorizer],
     extensions: [SootTelemetry.Resource.StreamRow]
 
   ets do
     private? false
+  end
+
+  # Default policies (POLICY-SPEC §4.1). `:registry_sync` covers
+  # registry upserts and ingest-time stream metadata loads.
+  policies do
+    policy always() do
+      access_type :strict
+      authorize_if actor_attribute_equals(:part, :registry_sync)
+    end
   end
 end

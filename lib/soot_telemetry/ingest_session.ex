@@ -21,9 +21,17 @@ defmodule SootTelemetry.IngestSession do
     otp_app: :soot_telemetry,
     domain: SootTelemetry.Domain,
     data_layer: Ash.DataLayer.Ets,
+    authorizers: [Ash.Policy.Authorizer],
     extensions: [SootTelemetry.Resource.IngestSession]
 
   ets do
     private? false
+  end
+
+  policies do
+    policy always() do
+      access_type :strict
+      authorize_if actor_attribute_equals(:part, :ingest_session_writer)
+    end
   end
 end
