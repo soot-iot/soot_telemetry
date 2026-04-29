@@ -54,19 +54,20 @@ defmodule SootTelemetry.Registry do
 
   defp ensure_schema(name, fingerprint, descriptor) do
     schema_module = SootTelemetry.schema()
+    actor = registry_sync()
 
-    case schema_module.get_for_stream_fingerprint(name, fingerprint, authorize?: false) do
+    case schema_module.get_for_stream_fingerprint(name, fingerprint, actor: actor) do
       {:ok, %_{} = schema} ->
         {:ok, schema}
 
       {:error, _} ->
         version = next_version(name)
-        schema_module.create(name, version, fingerprint, descriptor, authorize?: false)
+        schema_module.create(name, version, fingerprint, descriptor, actor: actor)
     end
   end
 
   defp next_version(name) do
-    case SootTelemetry.schema().for_stream(name, authorize?: false) do
+    case SootTelemetry.schema().for_stream(name, actor: registry_sync()) do
       {:ok, []} -> 1
       {:ok, schemas} -> (Enum.map(schemas, & &1.version) |> Enum.max()) + 1
       _ -> 1
@@ -75,15 +76,16 @@ defmodule SootTelemetry.Registry do
 
   defp upsert_stream(module, name, schema, opts) do
     stream_module = SootTelemetry.stream_row()
+    actor = registry_sync()
 
-    case stream_module.get_by_name(name, authorize?: false) do
+    case stream_module.get_by_name(name, actor: actor) do
       {:ok, %_{} = stream} ->
         if stream.current_schema_id == schema.id do
           {:ok, stream}
         else
           Ash.update(stream, %{current_schema_id: schema.id},
             action: :update,
-            authorize?: false
+            actor: actor
           )
         end
 
@@ -98,10 +100,12 @@ defmodule SootTelemetry.Registry do
             retention: retention_map(module),
             partitioning: partition_for(module)
           },
-          authorize?: false
+          actor: actor
         )
     end
   end
+
+  defp registry_sync, do: SootTelemetry.Actors.system(:registry_sync)
 
   defp tenant_scope_for(module) do
     if Info.per_tenant?(module), do: :per_tenant, else: :shared
