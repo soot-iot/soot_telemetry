@@ -206,7 +206,7 @@ defmodule SootTelemetry.Plug.IngestTest do
     end
 
     test "paused stream → 423", ctx do
-      {:ok, _} = StreamRow.pause(ctx.stream)
+      {:ok, _} = StreamRow.pause(ctx.stream, authorize?: false)
 
       conn = request(ctx.actor, :vibration, "x", valid_headers(ctx.schema))
       assert conn.status == 423
@@ -214,7 +214,7 @@ defmodule SootTelemetry.Plug.IngestTest do
     end
 
     test "retired stream → 423 with status retired", ctx do
-      {:ok, _} = StreamRow.retire(ctx.stream)
+      {:ok, _} = StreamRow.retire(ctx.stream, authorize?: false)
 
       conn = request(ctx.actor, :vibration, "x", valid_headers(ctx.schema))
       assert conn.status == 423

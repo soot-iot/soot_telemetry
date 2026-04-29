@@ -33,25 +33,25 @@ defmodule SootTelemetry.StreamRowTest do
 
   describe "lifecycle" do
     test "pause → :paused, resume → :active, retire → :retired", ctx do
-      {:ok, paused} = StreamRow.pause(ctx.stream)
+      {:ok, paused} = StreamRow.pause(ctx.stream, authorize?: false)
       assert paused.status == :paused
 
-      {:ok, resumed} = StreamRow.resume(paused)
+      {:ok, resumed} = StreamRow.resume(paused, authorize?: false)
       assert resumed.status == :active
 
-      {:ok, retired} = StreamRow.retire(resumed)
+      {:ok, retired} = StreamRow.retire(resumed, authorize?: false)
       assert retired.status == :retired
     end
   end
 
   describe "get_by_name" do
     test "returns the row", ctx do
-      assert {:ok, %StreamRow{id: id}} = StreamRow.get_by_name(:vibration)
+      assert {:ok, %StreamRow{id: id}} = StreamRow.get_by_name(:vibration, authorize?: false)
       assert id == ctx.stream.id
     end
 
     test "returns {:error, _} when missing" do
-      assert {:error, _} = StreamRow.get_by_name(:nope)
+      assert {:error, _} = StreamRow.get_by_name(:nope, authorize?: false)
     end
   end
 end
