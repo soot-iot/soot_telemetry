@@ -12,9 +12,14 @@ the project adheres to semantic versioning.
   `INSERT INTO <table> FORMAT <format>` (default `ArrowStream`); no
   decoding. Insert failures are logged at error level with full batch
   context and surfaced as `{:error, {:clickhouse_insert_failed, _}}`
-  so the ingest plug returns a 500. Opt in by setting
-  `config :soot_telemetry, :writer, SootTelemetry.Writer.ClickHouse`;
-  `SootTelemetry.Application` then auto-starts the connection pool.
+  so the ingest plug returns a 500. `SootTelemetry.Application`
+  auto-starts the connection pool when this writer is configured.
+- `mix soot_telemetry.install` now writes
+  `config :soot_telemetry, :writer, SootTelemetry.Writer.ClickHouse`
+  into the consumer's `config/config.exs`. The library's own
+  application-env default stays `Writer.Noop` so soot_telemetry's test
+  suite can run with zero infra; consumer projects always boot against
+  ClickHouse, which is mandatory in the soot stack.
 - Configurable `max_body_bytes` plug option on `SootTelemetry.Plug.Ingest`.
 - `SootTelemetry.Plug.Ingest.TenantSan` — extracted SAN-tenant resolver
   with its own test surface.
