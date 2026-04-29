@@ -84,6 +84,7 @@ if Code.ensure_loaded?(Igniter) do
       |> maybe_generate_example_stream(options)
       |> mount_ingest_route()
       |> create_clickhouse_migrations_dir()
+      |> configure_writer()
       |> configure_clickhouse_url()
       |> note_next_steps(options)
     end
@@ -348,6 +349,21 @@ if Code.ensure_loaded?(Igniter) do
       )
     end
 
+    # Wires the consumer's `:soot_telemetry, :writer` to the real
+    # ClickHouse writer in `config.exs`. The library default stays
+    # `Writer.Noop` so soot_telemetry's own test suite can run with
+    # zero infra; consumer projects always boot against ClickHouse,
+    # which is mandatory in the soot stack (see CLAUDE.md / SPEC-2 §5.1).
+    defp configure_writer(igniter) do
+      Igniter.Project.Config.configure(
+        igniter,
+        "config.exs",
+        :soot_telemetry,
+        [:writer],
+        SootTelemetry.Writer.ClickHouse
+      )
+    end
+
     defp configure_clickhouse_url(igniter) do
       igniter
       |> Igniter.Project.Config.configure(
@@ -384,6 +400,11 @@ if Code.ensure_loaded?(Igniter) do
       `SootTelemetry.Domain` is registered in `:ash_domains`.
       `/ingest` is mounted under the `:device_mtls` pipeline.
 
+      `:soot_telemetry, :writer` is set to
+      `SootTelemetry.Writer.ClickHouse` in `config/config.exs` —
+      ingested batches go straight to ClickHouse via the `:ch` pool
+      that `SootTelemetry.Application` starts on boot.
+
       Next steps:
 
         mix soot_telemetry.gen_migrations   # render ClickHouse DDL
@@ -391,7 +412,9 @@ if Code.ensure_loaded?(Igniter) do
 
       The `:soot_telemetry, :clickhouse_url` key has been seeded in
       `config/dev.exs` and `config/test.exs`. Override in
-      `config/runtime.exs` for production.
+      `config/runtime.exs` for production. Tune the writer pool /
+      credentials with
+      `config :soot_telemetry, SootTelemetry.Writer.ClickHouse, …`.
 
       Register your stream modules at boot via
       `SootTelemetry.Registry.register_all/1` (typically from your

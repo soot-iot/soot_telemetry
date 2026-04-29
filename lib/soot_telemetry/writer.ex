@@ -2,9 +2,14 @@ defmodule SootTelemetry.Writer do
   @moduledoc """
   Behavior for handing a validated batch downstream.
 
-  The default in this library is `SootTelemetry.Writer.Noop`, which
-  records no rows. Production deployments swap in a writer that bulk-
-  inserts the Arrow batch into ClickHouse over the `ch` driver.
+  The library's application-env default is `SootTelemetry.Writer.Noop`,
+  which records no rows. That default exists *only* so soot_telemetry's
+  own test suite can run without ClickHouse — every consumer project
+  has `mix soot_telemetry.install` write
+  `config :soot_telemetry, :writer, SootTelemetry.Writer.ClickHouse`
+  into `config/config.exs`, which forwards Arrow batches to ClickHouse
+  over the `ch` driver. Postgres + ClickHouse are mandatory for any
+  soot deployment, including dev.
 
   The writer is invoked *after* the ingest plug has validated headers,
   fingerprint, sequence, rate limits, and authorization. It is not

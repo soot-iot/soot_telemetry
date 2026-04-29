@@ -155,6 +155,26 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
     end
   end
 
+  describe "writer wiring" do
+    test "sets :writer to SootTelemetry.Writer.ClickHouse in config.exs" do
+      result =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      diff = diff(result, only: "config/config.exs")
+      assert diff =~ "writer:"
+      assert diff =~ "SootTelemetry.Writer.ClickHouse"
+    end
+
+    test "running twice does not duplicate the writer config" do
+      project_with_router()
+      |> Igniter.compose_task("soot_telemetry.install", [])
+      |> apply_igniter!()
+      |> Igniter.compose_task("soot_telemetry.install", [])
+      |> assert_unchanged("config/config.exs")
+    end
+  end
+
   describe "formatter import" do
     test "imports :soot_telemetry into .formatter.exs" do
       project_with_router()
@@ -200,6 +220,17 @@ defmodule Mix.Tasks.SootTelemetry.InstallTest do
       assert Enum.any?(
                igniter.notices,
                &(&1 =~ "soot_telemetry.gen_migrations")
+             )
+    end
+
+    test "notice mentions the ClickHouse writer is wired" do
+      igniter =
+        project_with_router()
+        |> Igniter.compose_task("soot_telemetry.install", [])
+
+      assert Enum.any?(
+               igniter.notices,
+               &(&1 =~ "SootTelemetry.Writer.ClickHouse")
              )
     end
 

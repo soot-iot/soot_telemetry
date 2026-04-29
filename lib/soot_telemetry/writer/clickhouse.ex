@@ -8,8 +8,13 @@ defmodule SootTelemetry.Writer.ClickHouse do
   already sent in the request body — one ingest request produces one
   INSERT.
 
-  This is the v0.2 default writer described in `SPEC-2.md` §5.1, opt-in
-  via `config :soot_telemetry, :writer, SootTelemetry.Writer.ClickHouse`.
+  This is the v0.2 writer described in `SPEC-2.md` §5.1. The library's
+  application-env default is `SootTelemetry.Writer.Noop` so the
+  soot_telemetry test suite can run with zero infra, but every consumer
+  project gets `config :soot_telemetry, :writer,
+  SootTelemetry.Writer.ClickHouse` written into `config/config.exs` by
+  `mix soot_telemetry.install` — Postgres + ClickHouse are mandatory
+  for any soot deployment, including dev.
 
   ## Configuration
 
