@@ -29,6 +29,10 @@ defmodule SootTelemetry.IngestSession do
   end
 
   policies do
+    bypass actor_attribute_equals(:role, :admin) do
+      authorize_if expr(tenant_id == ^actor(:tenant_id))
+    end
+
     policy always() do
       access_type :strict
       authorize_if actor_attribute_equals(:part, :ingest_session_writer)

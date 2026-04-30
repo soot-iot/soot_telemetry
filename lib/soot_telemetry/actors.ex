@@ -35,4 +35,18 @@ defmodule SootTelemetry.Actors do
 
   def system(part, opts) when is_atom(part) and is_list(opts),
     do: %System{part: part, tenant_id: Keyword.get(opts, :tenant_id)}
+
+  @doc """
+  Build a stand-in admin actor for tests.
+
+  StreamRow and Schema are global, so `tenant_id` is informational.
+  IngestSession is tenant-scoped — pass the matching `tenant_id` so
+  the admin bypass filter accepts it.
+  """
+  @spec admin() :: %{role: :admin}
+  def admin, do: %{role: :admin}
+
+  @spec admin(binary()) :: %{role: :admin, tenant_id: binary()}
+  def admin(tenant_id) when is_binary(tenant_id),
+    do: %{role: :admin, tenant_id: tenant_id}
 end

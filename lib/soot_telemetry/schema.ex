@@ -28,6 +28,10 @@ defmodule SootTelemetry.Schema do
   end
 
   policies do
+    bypass actor_attribute_equals(:role, :admin) do
+      authorize_if always()
+    end
+
     policy always() do
       access_type :strict
       authorize_if actor_attribute_equals(:part, :registry_sync)
