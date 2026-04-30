@@ -30,6 +30,10 @@ defmodule SootTelemetry.StreamRow do
   # Default policies (POLICY-SPEC §4.1). `:registry_sync` covers
   # registry upserts and ingest-time stream metadata loads.
   policies do
+    bypass actor_attribute_equals(:role, :admin) do
+      authorize_if always()
+    end
+
     policy always() do
       access_type :strict
       authorize_if actor_attribute_equals(:part, :registry_sync)
