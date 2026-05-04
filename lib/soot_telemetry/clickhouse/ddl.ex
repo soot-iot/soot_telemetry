@@ -205,6 +205,12 @@ defmodule SootTelemetry.ClickHouse.DDL do
   defp struct_from_descriptor(%Field{} = f), do: f
   defp struct_from_descriptor(%{name: _} = m), do: struct(Field, m)
 
+  # Schema descriptors are persisted as :map with string keys; we
+  # round-trip through atoms because the DSL works in atoms. Field
+  # names and types must already exist as atoms — they're declared in
+  # the consumer app's DSL at compile time. String.to_existing_atom/1
+  # turns a stale stored descriptor (atom no longer in the BEAM) into
+  # an explicit ArgumentError instead of growing the atom table.
   defp maybe_atom(v) when is_atom(v), do: v
-  defp maybe_atom(v) when is_binary(v), do: String.to_atom(v)
+  defp maybe_atom(v) when is_binary(v), do: String.to_existing_atom(v)
 end
