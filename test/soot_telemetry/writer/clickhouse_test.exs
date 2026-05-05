@@ -99,6 +99,58 @@ defmodule SootTelemetry.Writer.ClickHouseTest do
     end
   end
 
+  describe "child_spec/1 — :clickhouse_url" do
+    setup do
+      prev_url = Application.get_env(:soot_telemetry, :clickhouse_url)
+      on_exit(fn -> restore(:soot_telemetry, :clickhouse_url, prev_url) end)
+      :ok
+    end
+
+    test "parses URL into scheme/hostname/port forwarded to Ch" do
+      Application.put_env(:soot_telemetry, :clickhouse_url, "https://ch.internal:9000")
+      spec = ClickHouse.child_spec(name: :url_pool)
+      pid = start_supervised!(%{spec | id: :url_pool_id})
+      assert is_pid(pid)
+
+      opts = StubCh.opts(:url_pool)
+      assert opts[:scheme] == "https"
+      assert opts[:hostname] == "ch.internal"
+      assert opts[:port] == 9000
+    end
+
+    test "absent URL leaves Ch opts to driver defaults" do
+      Application.delete_env(:soot_telemetry, :clickhouse_url)
+      spec = ClickHouse.child_spec(name: :no_url_pool)
+      pid = start_supervised!(%{spec | id: :no_url_pool_id})
+      assert is_pid(pid)
+
+      opts = StubCh.opts(:no_url_pool)
+      refute Keyword.has_key?(opts, :scheme)
+      refute Keyword.has_key?(opts, :hostname)
+      refute Keyword.has_key?(opts, :port)
+    end
+
+    test "explicit per-module hostname wins over URL" do
+      Application.put_env(:soot_telemetry, :clickhouse_url, "http://from-url:1234")
+
+      Application.put_env(:soot_telemetry, ClickHouse,
+        name: :wins_pool,
+        format: "ArrowStream",
+        hostname: "explicit.host"
+      )
+
+      spec = ClickHouse.child_spec([])
+      pid = start_supervised!(%{spec | id: :wins_pool_id})
+      assert is_pid(pid)
+
+      opts = StubCh.opts(:wins_pool)
+      assert opts[:hostname] == "explicit.host"
+      # scheme/port were not set explicitly — URL still fills them
+      assert opts[:scheme] == "http"
+      assert opts[:port] == 1234
+    end
+  end
+
   describe "configured/0 helpers" do
     test "pool_name/0 picks up :name from app env" do
       assert ClickHouse.pool_name() == :stub_ch_pool
