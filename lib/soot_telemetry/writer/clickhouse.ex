@@ -34,6 +34,18 @@ defmodule SootTelemetry.Writer.ClickHouse do
   in the INSERT statement; it defaults to `"ArrowStream"` because the
   ingest endpoint expects Arrow IPC stream framing.
 
+  As an alternative to setting `:scheme` / `:hostname` / `:port`
+  individually, the top-level `:clickhouse_url` key is honoured:
+
+      config :soot_telemetry, clickhouse_url: "http://ch.internal:9000"
+
+  The URL is parsed via `URI.parse/1` and its scheme, host, and port
+  are folded into the Ch opts only when not already set explicitly on
+  this module's keyword config (per-module values win). This is the
+  path `mix soot.install` writes to from `SOOT_CH_URL`, so an
+  operator can point the backend at a remote ClickHouse without
+  recompiling.
+
   ## Failure surface
 
   ClickHouse rejections (HTTP errors, schema mismatch, table missing,
@@ -63,6 +75,7 @@ defmodule SootTelemetry.Writer.ClickHouse do
   def child_spec(opts) do
     runtime_opts = Keyword.merge(runtime_config(), opts)
     {ch_opts, _writer_opts} = split_opts(runtime_opts)
+    ch_opts = apply_clickhouse_url(ch_opts)
     ch_opts = Keyword.put_new(ch_opts, :name, pool_name())
     ch_opts = Keyword.put_new(ch_opts, :pool_size, @default_pool_size)
 
@@ -131,6 +144,27 @@ defmodule SootTelemetry.Writer.ClickHouse do
     {writer, ch} = Keyword.split(opts, [:format])
     {ch, writer}
   end
+
+  # Folds `:soot_telemetry, :clickhouse_url` into Ch opts. Per-module
+  # `:scheme` / `:hostname` / `:port` win over the URL via `put_new`,
+  # so an operator who wants finer control can still set them directly.
+  defp apply_clickhouse_url(opts) do
+    case Application.get_env(:soot_telemetry, :clickhouse_url) do
+      url when is_binary(url) and url != "" ->
+        uri = URI.parse(url)
+
+        opts
+        |> maybe_put_new(:scheme, uri.scheme)
+        |> maybe_put_new(:hostname, uri.host)
+        |> maybe_put_new(:port, uri.port)
+
+      _ ->
+        opts
+    end
+  end
+
+  defp maybe_put_new(opts, _key, nil), do: opts
+  defp maybe_put_new(opts, key, value), do: Keyword.put_new(opts, key, value)
 
   defp resolve_table(nil), do: {:error, :missing_stream}
 
